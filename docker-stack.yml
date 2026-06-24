@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  # Service Frontend (Reverse Proxy Nginx + Vue.js statique)
+  frontend:
+    image: ${DOCKERHUB_USERNAME}/swarm-frontend:${COMMIT_SHA}
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+
+  # Service Backend (API Node.js/TypeScript)
+  backend:
+    image: ${DOCKERHUB_USERNAME}/swarm-backend:${COMMIT_SHA}
+    # Non exposé publiquement sur l'hôte, uniquement via le réseau overlay app-network
+    networks:
+      - app-network
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 15s
+        failure_action: rollback
+        monitor: 10s
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      # Test sur la route /health du backend sur le port 3000
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  app-network:
+    driver: overlay
